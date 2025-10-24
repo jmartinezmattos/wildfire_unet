@@ -120,28 +120,23 @@ def main():
         f.write(f"Training started at: {datetime.now()}\n")
         f.write(f"Hyperparameters: {json.dumps(config)}\n\n")
 
-        for epoch in range(NUM_EPOCHS):
-            epoch_start = time.time()
-            train_fn(train_loader, model, optimizer, loss_fn, scaler)
-            epoch_time = time.time() - epoch_start
+    for epoch in range(NUM_EPOCHS):
+        train_fn(train_loader, model, optimizer, loss_fn, scaler)
+        
+        # Guardar modelo
+        checkpoint = {
+            "state_dict": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+        }
+        save_checkpoint(checkpoint)
 
-            # Guardar modelo
-            checkpoint = {
-                "state_dict": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-            }
-            save_checkpoint(checkpoint)
+        # Check accuracy
+        check_accuracy(val_loader, model, device=DEVICE)
 
-            # Check accuracy
-            accuracy, dice_score = check_accuracy(val_loader, model, device=DEVICE)
 
-            # Guardar resultados en el log
-            f.write(f"Epoch [{epoch+1}/{NUM_EPOCHS}] - "
-                    f"Time: {epoch_time:.2f}s - "
-                    f"Accuracy: {accuracy:.4f} - Dice Score: {dice_score:.4f}\n")
-            f.flush()  # Escribe inmediatamente en el archivo
+    total_time = time.time() - start_time
 
-        total_time = time.time() - start_time
+    with open(log_file, "w") as f:
         f.write(f"\nTraining finished at: {datetime.now()}\n")
         f.write(f"Total training time: {total_time/60:.2f} minutes\n")
 
