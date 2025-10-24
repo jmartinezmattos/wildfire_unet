@@ -1,5 +1,7 @@
 import os
-
+import time
+import json
+from datetime import datetime
 import torch
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -15,20 +17,24 @@ from utils import (
     save_predictions_as_imgs,
 )
 
-# Hyperparameters etc.
-LEARNING_RATE = 1e-4
+# Load config
+with open("config.json", "r") as f:
+    config = json.load(f)
+
+# Use values
+LEARNING_RATE = config["LEARNING_RATE"]
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 16
-NUM_EPOCHS = 3
-NUM_WORKERS = 2
-IMAGE_HEIGHT = 160  # 1280 originally
-IMAGE_WIDTH = 240  # 1918 originally
-PIN_MEMORY = True
-LOAD_MODEL = False
-TRAIN_IMG_DIR = "data/SatFire/SatFire Dataset/train/data/"
-TRAIN_MASK_DIR = "data/SatFire/SatFire Dataset/train/label/"
-VAL_IMG_DIR = "data/SatFire/SatFire Dataset/test/data/"
-VAL_MASK_DIR = "data/SatFire/SatFire Dataset/test/label/"
+BATCH_SIZE = config["BATCH_SIZE"]
+NUM_EPOCHS = config["NUM_EPOCHS"]
+NUM_WORKERS = config["NUM_WORKERS"]
+IMAGE_HEIGHT = config["IMAGE_HEIGHT"]
+IMAGE_WIDTH = config["IMAGE_WIDTH"]
+PIN_MEMORY = config["PIN_MEMORY"]
+LOAD_MODEL = config["LOAD_MODEL"]
+TRAIN_IMG_DIR = config["TRAIN_IMG_DIR"]
+TRAIN_MASK_DIR = config["TRAIN_MASK_DIR"]
+VAL_IMG_DIR = config["VAL_IMG_DIR"]
+VAL_MASK_DIR = config["VAL_MASK_DIR"]
 
 def train_fn(loader, model, optimizer, loss_fn, scaler):
     loop = tqdm(loader)
@@ -54,6 +60,7 @@ def train_fn(loader, model, optimizer, loss_fn, scaler):
 
 def main():
     os.makedirs('checkpoints', exist_ok=True)
+    os.makedirs('logs', exist_ok=True)
 
     train_transform = A.Compose(
         [
@@ -105,23 +112,38 @@ def main():
     check_accuracy(val_loader, model, device=DEVICE)
     scaler = torch.cuda.amp.GradScaler()
 
-    for epoch in range(NUM_EPOCHS):
-        train_fn(train_loader, model, optimizer, loss_fn, scaler)
+    log_file = f"logs/log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 
-        # save model
-        checkpoint = {
-            "state_dict": model.state_dict(),
-            "optimizer":optimizer.state_dict(),
-        }
-        save_checkpoint(checkpoint)
+    start_time = time.time()
 
-        # check accuracy
-        check_accuracy(val_loader, model, device=DEVICE)
+    with open(log_file, "w") as f:
+        f.write(f"Training started at: {datetime.now()}\n")
+        f.write(f"Hyperparameters: {json.dumps(config)}\n\n")
 
-        # print some examples to a folder
-        save_predictions_as_imgs(
-            val_loader, model, folder="saved_images/", device=DEVICE
-        )
+        for epoch in range(NUM_EPOCHS):
+            epoch_start = time.time()
+            train_fn(train_loader, model, optimizer, loss_fn, scaler)
+            epoch_time = time.time() - epoch_start
+
+            # Guardar modelo
+            checkpoint = {
+                "state_dict": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+            }
+            save_checkpoint(checkpoint)
+
+            # Check accuracy
+            accuracy, dice_score = check_accuracy(val_loader, model, device=DEVICE)
+
+            # Guardar resultados en el log
+            f.write(f"Epoch [{epoch+1}/{NUM_EPOCHS}] - "
+                    f"Time: {epoch_time:.2f}s - "
+                    f"Accuracy: {accuracy:.4f} - Dice Score: {dice_score:.4f}\n")
+            f.flush()  # Escribe inmediatamente en el archivo
+
+        total_time = time.time() - start_time
+        f.write(f"\nTraining finished at: {datetime.now()}\n")
+        f.write(f"Total training time: {total_time/60:.2f} minutes\n")
 
 
 if __name__ == "__main__":
