@@ -3,3 +3,4 @@ torchvision
 albumentations
 tqdm
 Pillow
+segmentation_models_pytorch

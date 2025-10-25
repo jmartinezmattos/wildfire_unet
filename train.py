@@ -5,6 +5,7 @@ from datetime import datetime
 import torch
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+import segmentation_models_pytorch as smp
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
@@ -35,6 +36,13 @@ TRAIN_IMG_DIR = config["TRAIN_IMG_DIR"]
 TRAIN_MASK_DIR = config["TRAIN_MASK_DIR"]
 VAL_IMG_DIR = config["VAL_IMG_DIR"]
 VAL_MASK_DIR = config["VAL_MASK_DIR"]
+MODEL = config["MODEL"] # custom or smp
+
+if MODEL not in ["custom", "smp"]:
+    raise ValueError("MODEL must be either 'custom' or 'smp'")
+
+print(f"Using device: {DEVICE}")
+print(f"Model type: {MODEL}")
 
 def train_fn(loader, model, optimizer, loss_fn, scaler):
     loop = tqdm(loader)
@@ -89,7 +97,16 @@ def main():
         ],
     )
 
-    model = UNET(in_channels=3, out_channels=1).to(DEVICE)
+    if MODEL == "custom":
+        model = UNET(in_channels=3, out_channels=1).to(DEVICE)
+    elif MODEL == "smp":
+        model = smp.Unet(
+            encoder_name="resnet34",
+            encoder_weights="imagenet",
+            in_channels=3,
+            classes=1,
+        ).to(DEVICE)
+
     loss_fn = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -112,7 +129,8 @@ def main():
     check_accuracy(val_loader, model, device=DEVICE)
     scaler = torch.cuda.amp.GradScaler()
 
-    log_file = f"logs/log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    train_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_file = f"logs/log_{train_timestamp}.txt"
 
     start_time = time.time()
 
@@ -128,7 +146,8 @@ def main():
             "state_dict": model.state_dict(),
             "optimizer": optimizer.state_dict(),
         }
-        save_checkpoint(checkpoint)
+
+        save_checkpoint(checkpoint, filename=f"my_checkpoint_{train_timestamp}.pth.tar")
 
         # Check accuracy
         check_accuracy(val_loader, model, device=DEVICE)
@@ -136,7 +155,7 @@ def main():
 
     total_time = time.time() - start_time
 
-    with open(log_file, "w") as f:
+    with open(log_file, "a") as f:
         f.write(f"\nTraining finished at: {datetime.now()}\n")
         f.write(f"Total training time: {total_time/60:.2f} minutes\n")
 

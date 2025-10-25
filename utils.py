@@ -1,3 +1,4 @@
+import os
 import torch
 import torchvision
 from dataset import FireDataset
@@ -5,10 +6,11 @@ from torch.utils.data import DataLoader
 from datetime import datetime
 
 
-def save_checkpoint(state, filename="my_checkpoint"):
+def save_checkpoint(state, filename="my_checkpoint.pth.tar"):
+    os.makedirs("checkpoints", exist_ok=True)
     now = datetime.now()
     timestamp = now.strftime("%Y%m%d_%H%M%S")  # formato: AAAAMMDD_HHMMSS
-    full_filename = f"checkpoints/{filename}_{timestamp}.pth.tar"
+    full_filename = f"checkpoints/{filename}"
     print(f"=> Saving checkpoint as {full_filename}")
     torch.save(state, full_filename)
 
